@@ -7,7 +7,7 @@ import java.util.concurrent.Semaphore;
 public class DriveThrough {
 
     private String businessName;
-    private Semaphore dispatchLineMutex = new Semaphore(5, true);
+    private Semaphore dispatchLineSem = new Semaphore(1, true);
     private Semaphore fulfillmentLineMutex = new Semaphore(1, true);
 
     private List<Customer> dispatchLineOne;
@@ -16,6 +16,9 @@ public class DriveThrough {
     private int currentFulfillmentTime;
     private boolean lineToggle;
     private int customerId = 0;
+    private int servedCustomer = 0;
+    private long totalServiceTime = 0;
+    private int missedCustomer = 0;
 
     private int staffCount;
     private int minFulfillmentTime;
@@ -36,39 +39,17 @@ public class DriveThrough {
         this.fulfillmentLine = new ArrayList<>();
     }
 
-    private void assignCustomers() {
-        while (true) {
-            try{
-                this.dispatchLineMutex.acquire();
-                Customer customer = new Customer("customer-"+ this.customerId++);
-                boolean lineFull = this.dispatchLineOne.size() + this.dispatchLineTwo.size() >= this.lineCapacity*2;
-                if (lineFull){
-                    new Thread(()->waitAround(customer, true)).start();
-                }
-                else {
-                    this.toDispatcher(customer);
-                }
-                this.dispatchLineMutex.release();
-                Thread.sleep(100);
-            }
-            catch (InterruptedException ex) {
-                System.out.print("Thread Interruption during assigning customer");
-            }
-        }
-    }
-
     /**
      * method to "start the drive through business"
      * by instantiating # of staff (threads) to serve from fulfillment line
-     * each staff are "treated" fairly because each thread will eventually acquire lock
-     * (Semaphore's fair parameter is set to true)
+     *
      */
     public void startBusiness() {
         new Thread(() -> mergeLine()).start();
-        new Thread(() -> assignCustomers()).start();
         for (int i = 0; i < this.staffCount; i++) {
             new Thread(() -> serve()).start();
         }
+        new Thread(() -> assignCustomers()).start();
     }
 
     /**
@@ -97,12 +78,13 @@ public class DriveThrough {
         try {
             Customer customer = this.fulfillmentLine.get(0);
             String greeting = customer.isSecondTime() ? " Apologize for waiting!!!" : "";
-            System.out.println("Customer " + customer.getCustomerId() + " at pickup point, fulfillment begin... " + greeting);
+            System.out.println("Customer at pickup point, fulfillment begin... " + greeting);
             Thread.sleep(this.currentFulfillmentTime++);
             this.fulfillmentLine.remove(0);
-            this.currentFulfillmentTime = currentFulfillmentTime >= maxFulfillmentTime
-                    ? minFulfillmentTime : currentFulfillmentTime;
-            System.out.println("Customer " + customer.getCustomerId() + " order fulfilled; Total fulfillment time: " + this.currentFulfillmentTime);
+            this.currentFulfillmentTime = currentFulfillmentTime >= maxFulfillmentTime ? minFulfillmentTime : currentFulfillmentTime;
+            System.out.println("Customer order fulfilled; Total fulfillment time: " + this.currentFulfillmentTime);
+            this.servedCustomer++;
+            this.totalServiceTime += this.currentFulfillmentTime;
         } catch (InterruptedException ex) {
             System.out.println("Thread Interrupted during order fulfillment");
         }
@@ -115,13 +97,14 @@ public class DriveThrough {
     private void mergeLine() {
         while (true) {
             try {
-                this.dispatchLineMutex.acquire();
+
                 this.fulfillmentLineMutex.acquire();
+                this.dispatchLineSem.acquire();
                 for (int i=0; i<this.lineCapacity-this.fulfillmentLine.size(); i++) {
                     this.toFulfillmentLine();
                 }
+                this.dispatchLineSem.release();
                 this.fulfillmentLineMutex.release();
-                this.dispatchLineMutex.release();
             } catch (InterruptedException ex) {
                 System.out.println("Thread interrupted during acquiring lock");
             }
@@ -134,62 +117,88 @@ public class DriveThrough {
     private void toFulfillmentLine() {
         if (this.lineToggle && this.dispatchLineOne.size() > 0) {
             this.fulfillmentLine.add(this.dispatchLineOne.get(0));
-            System.out.println("Customer "+this.dispatchLineOne.get(0).getCustomerId()+" is moving to fulfillment line");
+            System.out.println("Customer is moving to fulfillment line from dispatch one");
             this.dispatchLineOne.remove(0);
         }
         else if(this.dispatchLineTwo.size() > 0) {
             this.fulfillmentLine.add(this.dispatchLineTwo.get(0));
-            System.out.println("Customer "+this.dispatchLineTwo.get(0).getCustomerId()+" is moving to fulfillment line");
+            System.out.println("Customer is moving to fulfillment line from dispatch two");
             this.dispatchLineTwo.remove(0);
         }
         else if (this.dispatchLineOne.size() > 0) {
             this.fulfillmentLine.add(this.dispatchLineOne.get(0));
-            System.out.println("Customer  "+this.dispatchLineOne.get(0).getCustomerId()+" is moving to fulfillment line");
+            System.out.println("Customer  is moving to fulfillment line from dispatch one");
             this.dispatchLineOne.remove(0);
         }
         this.lineToggle = !this.lineToggle;
     }
 
-    private void waitAround(Customer customer, boolean firstTime){
-        boolean success = false;
-        try {
-            if (customer.isSecondTime()){
-                new Thread(() -> customer.waitAround(customer.getSecondWaitTime())).start();
-            }
-            else {
-                new Thread(() -> customer.waitAround(customer.getWaitTime())).start();
-            }
-            while(!customer.isFinishedWaiting()) {
-                this.dispatchLineMutex.acquire();
-                boolean lineFull = this.dispatchLineOne.size() + this.dispatchLineTwo.size() >= this.lineCapacity*2;
-                if(!lineFull){
-                    this.toDispatcher(customer);
-                    success = true;
+    private void assignCustomers() {
+        while (true) {
+            try{
+                Customer customer = new Customer("customer-"+ this.customerId++);
+                synchronized (customer){
+                    this.dispatchLineSem.acquire();
+                    boolean lineFull = this.dispatchLineOne.size() + this.dispatchLineTwo.size() >= this.lineCapacity*2;
+                    if (lineFull){
+                        new Thread(()-> waitAndComeback(customer, true)).start();
+                        this.dispatchLineSem.release();
+                    }
+                    else {
+                        this.toDispatcher(customer);
+                        this.dispatchLineSem.release();
+                    }
+                    Thread.sleep(100);
                 }
-                this.dispatchLineMutex.release();
             }
-            if(!success & firstTime){
-                Thread.sleep(600);
-                customer.setFinishedWaiting(false);
-                customer.setSecondTime(true);
-                new Thread(() -> waitAround(customer, false)).start();
+            catch (InterruptedException ex) {
+                System.out.print("Thread Interruption during assigning customer");
             }
         }
-        catch (InterruptedException ex){
+    }
 
+    private void waitAndComeback(Customer customer, boolean firstTime){
+        synchronized (customer){
+            Thread waitingSeat = firstTime ? new Thread(() -> customer.waitAround(customer.getWaitTime())) : new Thread(() -> customer.waitAround(customer.getSecondWaitTime()));
+            waitingSeat.start();
+            boolean success = false;
+            while(waitingSeat.isAlive()) {
+                if (this.dispatchLineSem.tryAcquire()){
+                    boolean lineFull = this.dispatchLineOne.size() + this.dispatchLineTwo.size() >= this.lineCapacity*2;
+                    if(!lineFull){
+                        this.toDispatcher(customer);
+                        this.dispatchLineSem.release();
+                        success = true;
+                        break;
+                    }
+                    this.dispatchLineSem.release();
+                }
+            }
+            if(!success && !firstTime) this.missedCustomer ++;
+            if (!success && firstTime) {
+                try {
+                    System.out.println("Customer is coming back in 600 seconds");
+                    Thread.sleep(600);
+                    new Thread(()-> waitAndComeback(customer, false)).start();
+                }
+                catch (InterruptedException ex) {
+                    System.out.println("Thread interrupted: during moving around 600 seconds");
+                }
+            }
         }
+
     }
 
     private void toDispatcher(Customer customer) {
         if (this.dispatchLineOne.size() > this.dispatchLineTwo.size()){
             if(this.dispatchLineTwo.size() < this.lineCapacity) this.dispatchLineTwo.add(customer);
             else if (this.dispatchLineOne.size() < this.lineCapacity) this.dispatchLineOne.add(customer);
-            System.out.println("Customer "+customer.getCustomerId()+" entered dispatch line");
+            System.out.println("Customer entered dispatch line");
         }
         else {
             if(this.dispatchLineOne.size() < this.lineCapacity) this.dispatchLineOne.add(customer);
             else if (this.dispatchLineTwo.size() < this.lineCapacity) this.dispatchLineTwo.add(customer);
-            System.out.println("Customer "+customer.getCustomerId()+" entered dispatch line");
+            System.out.println("Customer entered dispatch line");
         }
     }
 
