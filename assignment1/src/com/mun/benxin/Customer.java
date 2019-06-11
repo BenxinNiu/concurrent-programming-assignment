@@ -1,5 +1,7 @@
 package com.mun.benxin;
 
+import java.util.Objects;
+
 public class Customer {
 
     private String customerId;
@@ -20,15 +22,15 @@ public class Customer {
         this.finishedWaiting = false;
         this.customerId = customerId;
         this.secondWaitTime = 40;
-        this.waitTime = 600;
+        this.waitTime = 20;
     }
 
     public void waitAround(int seconds){
         try{
             if (this.isSecondTime)
-                System.out.println("Customer "+customerId+" is coming back (second time) in "+ seconds +" seconds");
+                System.out.println("Customer is waiting (second time) for "+ seconds +" seconds");
             else
-                System.out.println("Customer "+customerId+" is coming back (first time) in "+ seconds +" seconds");
+                System.out.println("Customer is waiting (first time) for "+ seconds +" seconds");
             this.isSecondTime = true;
             this.finishedWaiting = false;
             Thread.sleep(seconds);
@@ -73,5 +75,23 @@ public class Customer {
 
     public void setFinishedWaiting(boolean finishedWaiting) {
         this.finishedWaiting = finishedWaiting;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Customer customer = (Customer) o;
+        return isServed == customer.isServed &&
+                isSecondTime == customer.isSecondTime &&
+                finishedWaiting == customer.finishedWaiting &&
+                waitTime == customer.waitTime &&
+                secondWaitTime == customer.secondWaitTime &&
+                customerId.equals(customer.customerId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(customerId, isServed, isSecondTime, finishedWaiting, waitTime, secondWaitTime);
     }
 }
