@@ -7,66 +7,84 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class GroceryStore {
-    private List<Customer> checkoutLineOne;
-    private List<Customer> checkoutLineTwo;
-    private List<Customer> checkoutLineThree;
+    private List<List<Customer>> checkoutLines;
     private List<Customer> customersWithService;
-    private List<Customer> customersWithoutService;
     private int currentBestLine;
+    private int customerCount = 0;
 
     private int lineCapacity;
     private int avalibleLines;
     private int minServeTime;
     private int maxServeTime;
-    private int simulationSeconds;
-    private int id = 0;
+    private long simulationSeconds;
 
-    private ReadWriteLock checkoutLineOneLock;
-    private ReadWriteLock checkoutLineTwoLock;
-    private ReadWriteLock checkoutLineThreeLock;
+    private List<ReadWriteLock> locks;
     private ReadWriteLock currentBestLineLock;
 
-    public GroceryStore() {
-        this.checkoutLineOne = new ArrayList<>();
-        this.checkoutLineTwo = new ArrayList<>();
-        this.checkoutLineThree = new ArrayList<>();
-        this.customersWithoutService = new ArrayList<>();
+    public GroceryStore(Builder builder) {
+        this.locks = new ArrayList<>();
+        this.checkoutLines = new ArrayList<>();
         this.customersWithService = new ArrayList<>();
         this.currentBestLine = 0;
-        this.avalibleLines = 3;
-        this.lineCapacity = 2;
-        this.minServeTime = 300;
-        this.maxServeTime = 600;
-        this.simulationSeconds = 14400;
 
-        this.checkoutLineOneLock = new ReentrantReadWriteLock();
-        this.checkoutLineTwoLock = new ReentrantReadWriteLock();
-        this.checkoutLineThreeLock = new ReentrantReadWriteLock();
+        this.avalibleLines = builder.avalibleLines;
+        this.lineCapacity = builder.lineCapacity;
+        this.minServeTime = builder.minServeTime;
+        this.maxServeTime = builder.maxServeTime;
+        this.simulationSeconds = builder.simulationSecond + System.currentTimeMillis();
+
         this.currentBestLineLock = new ReentrantReadWriteLock();
+        for (int i=0; i<this.avalibleLines+1; i++) {
+            this.checkoutLines.add(new ArrayList<>());
+            this.locks.add(new ReentrantReadWriteLock());
+        }
     }
 
     public void openBusiness() {
-        new Thread(()-> assignCustomer()).start();
-        new Thread(()->serve(0)).start();
-        new Thread(()->serve(1)).start();
-        new Thread(()->serve(2)).start();
+        boolean simulationFinished = false;
+        List<Thread> pool = new ArrayList<>();
+        pool.add(new Thread(this::assignCustomer));
+        for (int i=0; i<this.avalibleLines; i++){
+            int lineId = i; // make this effective final for lambda reference
+            pool.add(new Thread(()->serve(lineId)));
+        }
+        pool.forEach(Thread::start);
+
+        while(!simulationFinished) {
+            int aliveCount = 0;
+            for(Thread t: pool){
+                if (t.isAlive()) aliveCount++;
+            }
+            simulationFinished = aliveCount == 0;
+        }
+
+        new SimulationReport.Builder("Grocery")
+                .customersWithService(this.customersWithService)
+                .customerCount(this.customerCount)
+                .maxFulfillmentTime(this.maxServeTime)
+                .minFulfillmentTime(this.minServeTime)
+                .build().printSimResult();
     }
 
     private void serve (int lineNumber) {
-        while (true) {
+        while (System.currentTimeMillis() < this.simulationSeconds) {
             this.fulfillOrder(lineNumber);
         }
     }
 
     private void fulfillOrder (int lineNumber) {
         try {
-            Thread.sleep(ThreadLocalRandom.current().nextInt(this.minServeTime, this.maxServeTime));
+            long fulfillmentTime = ThreadLocalRandom.current().nextInt(this.minServeTime, this.maxServeTime);
+            Thread.sleep(fulfillmentTime);
             this.getLockInstance(lineNumber).writeLock().lock();
             if(this.getCheckoutLine(lineNumber).size() > 0){
                 Customer customer = this.getCheckoutLine(lineNumber).get(0);
-                this.customersWithService.add(customer);
+                this.getLockInstance(this.avalibleLines).writeLock().lock();
+                this.customersWithService.add(customer.setServiceTime(fulfillmentTime));
+                this.getLockInstance(this.avalibleLines).writeLock().unlock();
                 this.getCheckoutLine(lineNumber).remove(0);
-                System.out.println("Customer "+ customer.getCustomerId()+ " on line "+lineNumber+" has been served");
+                String greeting = customer.isSecondTime() ? " Apologize for waiting!!!" : "";
+                System.out.println("Customer on line "+lineNumber+" has been served "+greeting);
                 new Thread(()->updateBestLine()).start();
             }
             this.getLockInstance(lineNumber).writeLock().unlock();
@@ -77,15 +95,16 @@ public class GroceryStore {
     }
 
     private void assignCustomer(){
-        while (true) {
-            Customer customer = new Customer("c"+id++);
+        while (System.currentTimeMillis() < this.simulationSeconds) {
+            Customer customer = new Customer("c"+ customerCount++);
             this.currentBestLineLock.readLock().lock();
             if (this.currentBestLine >= 0)
                 this.tryJoinLine(this.currentBestLine, customer);
             else
                 new Thread(()->waitAround(customer, true)).start();
             this.currentBestLineLock.readLock().unlock();
-            try {Thread.sleep(100);} catch (InterruptedException ex) {}
+            try {Thread.sleep(ThreadLocalRandom.current().nextInt(50, 101));}
+            catch (InterruptedException ex) {}
         }
     }
 
@@ -93,7 +112,7 @@ public class GroceryStore {
         this.getLockInstance(lineNumber).writeLock().lock();
         if (this.getCheckoutLine(lineNumber).size()<this.lineCapacity) {
             this.getCheckoutLine(lineNumber).add(customer);
-            System.out.println("Customer "+ customer.getCustomerId() +" joined line "+lineNumber);
+            System.out.println("Customer joined line "+lineNumber);
             new Thread(()->updateBestLine()).start();
         }
         this.getLockInstance(lineNumber).writeLock().unlock();
@@ -133,7 +152,7 @@ public class GroceryStore {
         }
         if (!success && firstTime){
             try {
-                System.out.println("Customer "+customer.getCustomerId()+" is coming back in 600 seconds");
+                System.out.println("Customer is coming back in 600 seconds");
                 Thread.sleep(600);
                 new Thread(()-> waitAround(customer, false)).start();
             }
@@ -144,20 +163,52 @@ public class GroceryStore {
     }
 
     private List<Customer> getCheckoutLine(int lineNumber) {
-        switch (lineNumber){
-            case 0: return this.checkoutLineOne;
-            case 1: return this.checkoutLineTwo;
-            case 2: return this.checkoutLineThree;
-            default: return this.checkoutLineOne;
-        }
+        return this.checkoutLines.get(lineNumber);
     }
 
     private ReadWriteLock getLockInstance(int lineNumber) {
-        switch (lineNumber){
-            case 0: return this.checkoutLineOneLock;
-            case 1: return this.checkoutLineTwoLock;
-            case 2: return this.checkoutLineThreeLock;
-            default: return this.checkoutLineOneLock;
+        return this.locks.get(lineNumber);
+    }
+
+    public static class Builder {
+        private String name;
+        private int lineCapacity;
+        private int avalibleLines;
+        private int minServeTime;
+        private int maxServeTime;
+        private long simulationSecond;
+
+        public Builder(String name) {
+            this.name = name;
+        }
+
+        public Builder lineCapacity(int lineCapacity) {
+            this.lineCapacity = lineCapacity;
+            return this;
+        }
+
+        public Builder avalibleLines(int avalibleLines) {
+            this.avalibleLines = avalibleLines;
+            return this;
+        }
+
+        public Builder minServeTime(int minServeTime) {
+            this.minServeTime = minServeTime;
+            return this;
+        }
+
+        public Builder maxServeTime(int maxServeTime) {
+            this.maxServeTime = maxServeTime;
+            return this;
+        }
+
+        public Builder simulationSeconds(long simulationSeconds) {
+            this.simulationSecond = simulationSeconds;
+            return this;
+        }
+
+        public GroceryStore build() {
+            return new GroceryStore(this);
         }
     }
 
