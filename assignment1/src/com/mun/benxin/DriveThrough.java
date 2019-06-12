@@ -13,17 +13,17 @@ public class DriveThrough {
     private List<Customer> dispatchLineOne;
     private List<Customer> dispatchLineTwo;
     private List<Customer> fulfillmentLine;
+    private List<Customer> customersWithService;
+    private List<Customer> customersWithoutService;
     private int currentFulfillmentTime;
     private boolean lineToggle;
     private int customerId = 0;
-    private int servedCustomer = 0;
-    private long totalServiceTime = 0;
-    private int missedCustomer = 0;
 
     private int staffCount;
     private int minFulfillmentTime;
     private int maxFulfillmentTime;
     private int lineCapacity;
+    private int simulationSeconds;
 
     private DriveThrough(Builder builder) {
         this.businessName = builder.businessName;
@@ -31,12 +31,28 @@ public class DriveThrough {
         this.minFulfillmentTime = builder.minFulfillmentTime;
         this.maxFulfillmentTime = builder.maxFulfillmentTime;
         this.lineCapacity = builder.lineCapacity;
+        this.simulationSeconds = builder.simulationSeconds;
 
         this.lineToggle = false;
         this.currentFulfillmentTime = minFulfillmentTime;
         this.dispatchLineOne = new ArrayList<>();
         this.dispatchLineTwo = new ArrayList<>();
         this.fulfillmentLine = new ArrayList<>();
+        this.customersWithoutService = new ArrayList<>();
+        this.customersWithService = new ArrayList<>();
+    }
+
+    public void printSimResult() {
+        int totalCustomer = this.customersWithoutService.size() + this.customersWithService.size();
+        long totalServiceHour = 0;
+        for (Customer customer: this.customersWithService){
+            totalServiceHour += customer.getServiceTime();
+        }
+        System.out.println("Simulation Result: \n");
+        System.out.println("There were a total of " + totalCustomer);
+        System.out.println(this.customersWithService.size() + " of them got served");
+        System.out.println(this.customersWithoutService.size() + " of them did not get served");
+        System.out.println("Average service time is "+ totalServiceHour / totalCustomer);
     }
 
     /**
@@ -61,7 +77,8 @@ public class DriveThrough {
         while (true) {
             try {
                 this.fulfillmentLineMutex.acquire();
-                if (this.fulfillmentLine.size() > 0) this.fulfillOrder();
+                if (this.fulfillmentLine.size() > 0)
+                    this.fulfillOrder();
                 this.fulfillmentLineMutex.release();
             } catch (InterruptedException ex) {
                 System.out.println("Thread interrupted during acquiring lock");
@@ -83,8 +100,7 @@ public class DriveThrough {
             this.fulfillmentLine.remove(0);
             this.currentFulfillmentTime = currentFulfillmentTime >= maxFulfillmentTime ? minFulfillmentTime : currentFulfillmentTime;
             System.out.println("Customer order fulfilled; Total fulfillment time: " + this.currentFulfillmentTime);
-            this.servedCustomer++;
-            this.totalServiceTime += this.currentFulfillmentTime;
+            this.customersWithService.add(customer.setServed(true).setServiceTime(this.currentFulfillmentTime));
         } catch (InterruptedException ex) {
             System.out.println("Thread Interrupted during order fulfillment");
         }
@@ -97,7 +113,6 @@ public class DriveThrough {
     private void mergeLine() {
         while (true) {
             try {
-
                 this.fulfillmentLineMutex.acquire();
                 this.dispatchLineSem.acquire();
                 for (int i=0; i<this.lineCapacity-this.fulfillmentLine.size(); i++) {
@@ -141,7 +156,7 @@ public class DriveThrough {
                     this.dispatchLineSem.acquire();
                     boolean lineFull = this.dispatchLineOne.size() + this.dispatchLineTwo.size() >= this.lineCapacity*2;
                     if (lineFull){
-                        new Thread(()-> waitAndComeback(customer, true)).start();
+                        new Thread(()-> waitOrComeback(customer, true)).start();
                         this.dispatchLineSem.release();
                     }
                     else {
@@ -157,8 +172,21 @@ public class DriveThrough {
         }
     }
 
-    private void waitAndComeback(Customer customer, boolean firstTime){
-        synchronized (customer){
+    private void toDispatcher(Customer customer) {
+        if (this.dispatchLineOne.size() > this.dispatchLineTwo.size()){
+            if(this.dispatchLineTwo.size() < this.lineCapacity) this.dispatchLineTwo.add(customer);
+            else if (this.dispatchLineOne.size() < this.lineCapacity) this.dispatchLineOne.add(customer);
+            System.out.println("Customer entered dispatch line");
+        }
+        else {
+            if(this.dispatchLineOne.size() < this.lineCapacity) this.dispatchLineOne.add(customer);
+            else if (this.dispatchLineTwo.size() < this.lineCapacity) this.dispatchLineTwo.add(customer);
+            System.out.println("Customer entered dispatch line");
+        }
+    }
+
+    private void waitOrComeback(Customer customer, boolean firstTime){
+        synchronized (this.customersWithoutService){
             Thread waitingSeat = firstTime ? new Thread(() -> customer.waitAround(customer.getWaitTime())) : new Thread(() -> customer.waitAround(customer.getSecondWaitTime()));
             waitingSeat.start();
             boolean success = false;
@@ -174,31 +202,19 @@ public class DriveThrough {
                     this.dispatchLineSem.release();
                 }
             }
-            if(!success && !firstTime) this.missedCustomer ++;
             if (!success && firstTime) {
                 try {
                     System.out.println("Customer is coming back in 600 seconds");
                     Thread.sleep(600);
-                    new Thread(()-> waitAndComeback(customer, false)).start();
+                    new Thread(()-> waitOrComeback(customer, false)).start();
                 }
                 catch (InterruptedException ex) {
                     System.out.println("Thread interrupted: during moving around 600 seconds");
                 }
             }
-        }
-
-    }
-
-    private void toDispatcher(Customer customer) {
-        if (this.dispatchLineOne.size() > this.dispatchLineTwo.size()){
-            if(this.dispatchLineTwo.size() < this.lineCapacity) this.dispatchLineTwo.add(customer);
-            else if (this.dispatchLineOne.size() < this.lineCapacity) this.dispatchLineOne.add(customer);
-            System.out.println("Customer entered dispatch line");
-        }
-        else {
-            if(this.dispatchLineOne.size() < this.lineCapacity) this.dispatchLineOne.add(customer);
-            else if (this.dispatchLineTwo.size() < this.lineCapacity) this.dispatchLineTwo.add(customer);
-            System.out.println("Customer entered dispatch line");
+            if(!success && !firstTime){
+                this.customersWithoutService.add(customer.setServed(false));
+            }
         }
     }
 
@@ -211,6 +227,7 @@ public class DriveThrough {
         private int minFulfillmentTime;
         private int maxFulfillmentTime;
         private int lineCapacity;
+        private int simulationSeconds;
 
 
         public Builder(String name){
@@ -219,6 +236,11 @@ public class DriveThrough {
 
         public Builder staffCount(int staffCount) {
             this.staffCount = staffCount;
+            return this;
+        }
+
+        public Builder simulationSeconds(int sec) {
+            this.simulationSeconds = sec;
             return this;
         }
 
