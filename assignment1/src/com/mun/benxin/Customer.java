@@ -28,7 +28,7 @@ public class Customer {
         this.secondWaitTime = 40;
         this.waitTime = 20;
         this.serviceTime=0;
-        this.arrivalTime = System.currentTimeMillis() % 1000;
+        this.arrivalTime = System.currentTimeMillis() / 1000;
     }
 
     public void waitAround(int seconds){
@@ -77,12 +77,16 @@ public class Customer {
     }
 
     public Customer setServiceTime(long fulfillmentTime){
-        this.serviceTime = (System.currentTimeMillis() % 1000) - this.arrivalTime + fulfillmentTime;
+        this.serviceTime = System.currentTimeMillis() / 1000-arrivalTime + fulfillmentTime;
         return this;
     }
 
     public long getServiceTime() {
         return serviceTime;
+    }
+
+    public long getArrivalTime() {
+        return arrivalTime;
     }
 
     @Override
