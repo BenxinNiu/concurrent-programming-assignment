@@ -16,6 +16,10 @@ public class Customer {
 
     private int secondWaitTime;
 
+    private long arrivalTime;
+
+    private long serviceTime;
+
     public Customer(String customerId) {
         this.isSecondTime = false;
         this.isServed = false;
@@ -23,6 +27,8 @@ public class Customer {
         this.customerId = customerId;
         this.secondWaitTime = 40;
         this.waitTime = 20;
+        this.serviceTime=0;
+        this.arrivalTime = System.currentTimeMillis() / 1000;
     }
 
     public void waitAround(int seconds){
@@ -49,16 +55,8 @@ public class Customer {
         return isServed;
     }
 
-    public void setServed(boolean served) {
-        isServed = served;
-    }
-
     public boolean isSecondTime() {
         return isSecondTime;
-    }
-
-    public void setSecondTime(boolean secondTime) {
-        isSecondTime = secondTime;
     }
 
     public int getWaitTime() {
@@ -73,8 +71,22 @@ public class Customer {
         return finishedWaiting;
     }
 
-    public void setFinishedWaiting(boolean finishedWaiting) {
-        this.finishedWaiting = finishedWaiting;
+    public Customer setServed(boolean served) {
+        isServed = served;
+        return this;
+    }
+
+    public Customer setServiceTime(long fulfillmentTime){
+        this.serviceTime = System.currentTimeMillis() / 1000-arrivalTime + fulfillmentTime;
+        return this;
+    }
+
+    public long getServiceTime() {
+        return serviceTime;
+    }
+
+    public long getArrivalTime() {
+        return arrivalTime;
     }
 
     @Override
