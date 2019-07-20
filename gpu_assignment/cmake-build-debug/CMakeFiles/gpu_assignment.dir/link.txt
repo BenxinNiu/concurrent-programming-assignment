@@ -1,0 +1,1 @@
+/usr/bin/cc -g   CMakeFiles/gpu_assignment.dir/main.c.o CMakeFiles/gpu_assignment.dir/kernel.c.o  -o gpu_assignment 

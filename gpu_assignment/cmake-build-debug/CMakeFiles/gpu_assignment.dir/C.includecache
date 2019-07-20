@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/batman/batcave/projects/concurrent-programming-assignment/gpu_assignment/main.c
+stdio.h
+-
+stdlib.h
+-
+OpenCL/opencl.h
+-
+CL/cl.h
+-
+math.h
+-
+

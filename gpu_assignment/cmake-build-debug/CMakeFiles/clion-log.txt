@@ -1,0 +1,4 @@
+/home/batman/Downloads/clion-2019.1.4/bin/cmake/linux/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" /home/batman/batcave/projects/concurrent-programming-assignment/gpu_assignment
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/batman/batcave/projects/concurrent-programming-assignment/gpu_assignment/cmake-build-debug
