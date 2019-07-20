@@ -12,52 +12,24 @@
 
 #define LSIZ 128
 
-#include <math.h>
-void calculate_distance(float *trajectory, float *distance, int i);
-
-
-void calculate_distance(float *raw_data, float *distance, int i){
-
-    int num_stop = (int) raw_data[1];
-    int start = 2 + i*num_stop * 2;
-    int end = start + num_stop * 2;
-    float x = pow(raw_data[start] - 0, 2);
-    float y = pow(raw_data[start +1] - 0, 2);
-    float sum = sqrt(x+y);
-    if (num_stop == 1){
-        distance[i] = sum;
+int main(int argc, char *argv[]) {
+    char *source = argv[1];
+    char *outputName = argv[2];
+    if(source==NULL || outputName==NULL){
+        printf("Not enough arugments provided \n \n "
+               "Usage: first argument is the source file name, second is the output filename \n \n ");
     }
     else {
-        for (int k=start+2; k<end; k+=2){
-            x = pow(raw_data[k] - raw_data[k-2], 2);
-            y = pow(raw_data[k+1] - raw_data[k-1], 2);
-            sum += sqrt(x+y);
-        }
-        distance[i] = sum;
+        printf("Source file specified: %s \n", source);
+        printf("Output file specified: %s \n", outputName);
     }
-}
-
-// A function to implement bubble sort
-void bubbleSort(int *reference_idx, float *distance, int *n)
-{
-    int i, j;
-    for (i = 0; i < *n-1; i++)
-        for (j = 0; j < *n-i-1; j++)
-            if (distance[j] > distance[j+1]){
-                float tmp = distance[j];
-                distance[j] = distance[j+1];
-                distance[j+1] = tmp;
-                int tmpIdx = reference_idx[j];
-                reference_idx[j] = reference_idx[j+1];
-                reference_idx[j+1] = tmpIdx;
-            }
-}
-int main() {
-
+    //Allow program to run without specifying output file...
+    //result will be printed in terminal if no output file specified
+    printf("Begin \n \n");
     int i;
-    FILE *file = fopen("./sample.txt", "r");
+    FILE *file = fopen(source, "r");
     if (file == NULL){
-        printf("Unable to open file... exiting");
+        printf("Unable to open source file: %s... exiting \n", source);
         exit(1);
     }
     float *raw_data = (float *)malloc(sizeof(float)*MAX_SOURCE_SIZE);
@@ -72,10 +44,10 @@ int main() {
     fclose(file);
     // read each line as char
     char line[LSIZ][LSIZ];
-    FILE *fptr = fopen("./sample.txt", "r");
+    FILE *fptr = fopen(source, "r");
     idx = 0;
     if(fptr == NULL){
-        printf("Unable to open file... exiting");
+        printf("Unable to open source file: %s... exiting \n", source);
         exit(1);
     }
     while(fgets(line[idx], LSIZ, fptr))
@@ -91,7 +63,7 @@ int main() {
         reference_idx[k] = k;
     }
 
-    printf("Even I die, I'm the hero (in memory of Tony)!\n");
+    printf("\nEven I die, I'm the hero EIDITH (in memory of Tony)!\n \n");
 
     // Load the kernel source code into the array source_str
     FILE *kernel_file;
@@ -182,8 +154,9 @@ int main() {
     for(i = 0; i < num_trajectory; i++)
         printf(" %f ", distance[i]);
 
-    printf("begin sorting... \n");
-    //PERFORM SORT
+    printf("\nBegin sorting... \n");
+
+    //PERFORM SORT in GPU
     global_item_size = 1;
     local_item_size = 1;
     ret = clEnqueueNDRangeKernel(command_queue, kernel2, 1, NULL,
@@ -194,20 +167,20 @@ int main() {
     ret = clEnqueueReadBuffer(command_queue, reference_idx_mem_obj, CL_TRUE, 0,
                               num_trajectory* sizeof(int), sorted, 0, NULL, NULL);
 
-    printf(" \n sorting complete, writing to file (), printed result as follows: \n");
+    printf(" \nSorting complete, writing to file (), printed result as follows: \n");
 
-    FILE* output = fopen("output.txt", "w");
+    FILE* output = fopen(outputName, "w");
     if(output == NULL)
     {
-        printf("Error outputting result!");
+        printf("Error outputting result to %s! \n", outputName);
         exit(1);
     }
     // Display the result to the screen
     for(i = 0; i < num_trajectory; i++){
-        printf("%s\n ", line[sorted[i]+1]);
-        fprintf(output,"%s\n",line[sorted[i]+1]);
+        printf("Trajectory: %s  Distance: %f \n", line[sorted[i]+1], distance[sorted[i]]);
+        fprintf(output,"Trajectory: %s  Distance: %f \n",line[sorted[i]+1], distance[sorted[i]]);
     }
-    printf("\n result are written to file");
+    printf("\nResult are written to file: %s \n", outputName);
     fclose(output);
 
     // Clean up
