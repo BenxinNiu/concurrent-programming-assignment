@@ -13,4 +13,4 @@ run `gcc main.c -o assign4 -lm -l OpenCL`
 
 ## Run (Linux):
 run `./assign4 sample.txt output1.txt`
-run `./assign4 sample2.txt output2.txt`
+or `./assign4 sample2.txt output2.txt`
