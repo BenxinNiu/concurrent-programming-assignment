@@ -1,0 +1,6 @@
+Trajectory: 2 2 4 6 10 8  Distance: 13.625118 
+Trajectory: 1 2 5 10 10 1  Distance: 17.583464 
+Trajectory: 0 5 10 10 11 15  Distance: 21.279360 
+Trajectory: 9 5 3 4 10 11  Distance: 26.277889 
+Trajectory: 10 4 4 10 20 20  Distance: 38.123573 
+Trajectory: 10 20 3 4 6 6  Distance: 43.430481 
