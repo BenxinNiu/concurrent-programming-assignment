@@ -1,0 +1,16 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/batman/batcave/projects/concurrent-programming-assignment/assignment3/main.c
+stdio.h
+-
+stdlib.h
+-
+CL/cl.h
+-
+

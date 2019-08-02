@@ -1,6 +1,7 @@
 # Assignment 4 setup
 
-This program is developed using OpenCL. To run, please install OpenCL for you OS.
+This program is developed using OpenCL and is tested with Ubuntu with Intel integrated GPU.
+To run, please install OpenCL for you OS.
 
 ## Usage
 Program accepts upto two arguments. Both of which are file names, with the first being trajectory data file, second being the output file name.
