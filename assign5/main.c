@@ -1,4 +1,6 @@
-/* merge sort */
+/*
+Benxin Niu
+*/
 #include <stdio.h>
 #include <mpi.h>
 #include <time.h>
